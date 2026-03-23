@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { AccountState } from '../../core/state/account.state';
 import { UiState } from '../../core/state/ui.state';
@@ -73,6 +73,58 @@ import { IconComponent } from '../../shared/components/icon.component';
           </button>
         </div>
       </div>
+      <!-- Update -->
+      <div class="rounded-lg border border-border bg-card mt-6">
+        <div class="border-b border-border px-4 py-3">
+          <h2 class="text-sm font-medium">Updates</h2>
+        </div>
+        <div class="px-4 py-3">
+          <div class="flex items-center justify-between">
+            <div>
+              <div class="text-sm">Version {{ currentVersion() }}</div>
+              @if (updateChecking()) {
+                <div class="flex items-center gap-1.5 text-xs text-muted-foreground mt-1">
+                  <span class="flex gap-0.5">
+                    <span class="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:0ms]"></span>
+                    <span class="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:150ms]"></span>
+                    <span class="h-1.5 w-1.5 rounded-full bg-muted-foreground animate-bounce [animation-delay:300ms]"></span>
+                  </span>
+                  Suche nach Updates…
+                </div>
+              } @else if (updateInfo()?.hasUpdate) {
+                <div class="text-xs text-primary mt-1">
+                  Version {{ updateInfo()?.latestVersion }} verfügbar!
+                </div>
+              } @else if (updateInfo() && !updateInfo()?.hasUpdate) {
+                <div class="text-xs text-muted-foreground mt-1">
+                  <app-icon name="check" [size]="12" class="inline-flex text-green-500" />
+                  Du bist auf dem neuesten Stand
+                </div>
+              }
+            </div>
+            <div class="flex gap-2">
+              @if (updateInfo()?.hasUpdate) {
+                <button
+                  class="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+                  (click)="openRelease()"
+                >
+                  <app-icon name="download" [size]="12" />
+                  Herunterladen
+                </button>
+              }
+              <button
+                class="inline-flex items-center gap-1 rounded-md px-3 py-1.5 text-xs hover:bg-accent transition-colors border border-border"
+                [disabled]="updateChecking()"
+                (click)="checkForUpdate()"
+              >
+                <app-icon name="rotate-cw" [size]="12" [class.animate-spin]="updateChecking()" />
+                Prüfen
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Debug -->
       <div class="rounded-lg border border-border bg-card mt-6">
         <div class="border-b border-border px-4 py-3">
@@ -105,6 +157,30 @@ export class SettingsComponent {
   private readonly accountService = inject(AccountService);
   private readonly notifications = inject(NotificationService);
   private readonly router = inject(Router);
+
+  currentVersion = signal('0.0.0');
+  updateChecking = signal(false);
+  updateInfo = signal<{ hasUpdate: boolean; latestVersion: string; releaseUrl: string } | null>(null);
+
+  constructor() {
+    window.electronAPI?.getVersion().then((v) => this.currentVersion.set(v));
+  }
+
+  async checkForUpdate(): Promise<void> {
+    this.updateChecking.set(true);
+    this.updateInfo.set(null);
+    try {
+      const info = await window.electronAPI?.checkForUpdate();
+      this.updateInfo.set(info ?? null);
+    } finally {
+      this.updateChecking.set(false);
+    }
+  }
+
+  openRelease(): void {
+    const url = this.updateInfo()?.releaseUrl;
+    if (url) window.electronAPI?.openRelease(url);
+  }
 
   goBack(): void {
     this.router.navigate(['/']);

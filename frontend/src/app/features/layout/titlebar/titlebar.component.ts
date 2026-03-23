@@ -9,6 +9,10 @@ declare global {
       isMaximized: () => Promise<boolean>;
       onMaximizedChange: (callback: (maximized: boolean) => void) => void;
       openDevTools: () => void;
+      getVersion: () => Promise<string>;
+      checkForUpdate: () => Promise<{ hasUpdate: boolean; currentVersion: string; latestVersion: string; releaseUrl: string; releaseNotes: string }>;
+      openRelease: (url: string) => void;
+      onUpdateAvailable: (callback: (update: { hasUpdate: boolean; latestVersion: string; releaseUrl: string }) => void) => void;
       platform: string;
     };
   }
