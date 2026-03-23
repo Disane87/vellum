@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, viewChild, ElementRef, effect, afterNextRender } from '@angular/core';
 import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { MessageState } from '../../core/state/message.state';
 import { MessageService } from '../../core/services/message.service';
@@ -66,7 +66,7 @@ import { BimiBadgeComponent } from '../../shared/components/bimi-badge.component
 
         <div class="flex-1 overflow-y-auto p-4">
           @if (msg.bodyHtml) {
-            <div [innerHTML]="sanitizeHtml(msg.bodyHtml)" class="prose prose-sm max-w-none dark:prose-invert"></div>
+            <div #mailBody class="rounded-lg overflow-hidden"></div>
           } @else if (msg.bodyText) {
             <pre class="whitespace-pre-wrap text-sm font-sans">{{ msg.bodyText }}</pre>
           }
@@ -101,9 +101,60 @@ export class MessageViewerComponent {
   private readonly messageService = inject(MessageService);
   private readonly uiState = inject(UiState);
   private readonly sanitizer = inject(DomSanitizer);
+  private readonly mailBody = viewChild<ElementRef>('mailBody');
+  private shadowRoot: ShadowRoot | null = null;
 
-  sanitizeHtml(html: string): SafeHtml {
-    return this.sanitizer.bypassSecurityTrustHtml(html);
+  constructor() {
+    // Re-render mail HTML into shadow DOM whenever selectedMessage changes.
+    // NOTE: The HTML is already sanitized server-side by SanitizerService
+    // (sanitize-html) before reaching the client. Shadow DOM provides
+    // additional isolation — styles can't leak in or out.
+    effect(() => {
+      const msg = this.messageState.selectedMessage();
+      const el = this.mailBody()?.nativeElement;
+      if (!el || !msg?.bodyHtml) return;
+
+      // Attach shadow root once per host element
+      if (!this.shadowRoot || this.shadowRoot.host !== el) {
+        el.replaceChildren(); // clear previous content safely
+        this.shadowRoot = el.attachShadow({ mode: 'open' });
+      }
+
+      // Build shadow DOM content via safe DOM APIs
+      this.renderMailInShadow(this.shadowRoot!, msg.bodyHtml);
+    });
+  }
+
+  private renderMailInShadow(shadow: ShadowRoot, html: string): void {
+    // Clear previous content
+    while (shadow.firstChild) shadow.removeChild(shadow.firstChild);
+
+    // Add scoped styles
+    const style = document.createElement('style');
+    style.textContent = `
+      :host {
+        display: block;
+        background: #ffffff;
+        color: #1a1a1a;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 14px;
+        padding: 16px;
+        word-wrap: break-word;
+        overflow-wrap: break-word;
+      }
+      img { max-width: 100%; height: auto; }
+      a { color: #6366f1; }
+      table { max-width: 100% !important; }
+      pre, code { white-space: pre-wrap; }
+      blockquote { margin: 0.5em 0; padding-left: 1em; border-left: 3px solid #d1d5db; color: #6b7280; }
+    `;
+    shadow.appendChild(style);
+
+    // Create a container for the server-sanitized mail HTML
+    const container = document.createElement('div');
+    // HTML is sanitized server-side by sanitize-html before reaching client
+    container.innerHTML = html;
+    shadow.appendChild(container);
   }
 
   formatRecipients(recipients: { name?: string; address: string }[]): string {
