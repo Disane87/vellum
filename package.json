@@ -100,6 +100,7 @@
     "@semantic-release/changelog": "^6.0.3",
     "@semantic-release/git": "^10.0.1",
     "concurrently": "^9.2.1",
+    "conventional-changelog-conventionalcommits": "^9.3.0",
     "electron": "^35.0.0",
     "electron-builder": "^26.0.0",
     "electronmon": "^2.0.4",
