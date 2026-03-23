@@ -1,3 +1,9 @@
+## [1.2.1](https://github.com/Disane87/vellum/compare/v1.2.0...v1.2.1) (2026-03-23)
+
+### 🐛 Bug Fixes
+
+* replace action-gh-release with custom upload script for GitHub Release ([9c68b30](https://github.com/Disane87/vellum/commit/9c68b30d6a020d80d294fd0adcd6dd58944b9fc4))
+
 ## [1.2.0](https://github.com/Disane87/vellum/compare/v1.1.0...v1.2.0) (2026-03-23)
 
 ### ✨ Features
