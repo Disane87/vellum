@@ -1,7 +1,7 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ImapService } from '../imap/imap.service';
 import { SanitizerService } from './sanitizer.service';
-import type { MessageListResponse, MessageFull, MessageFlag } from '@imap-mail/shared';
+import type { MessageListResponse, MessageFull, MessageFlag } from '@vellum/shared';
 
 @Injectable()
 export class MessageService {

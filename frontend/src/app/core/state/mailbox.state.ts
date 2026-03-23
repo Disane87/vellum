@@ -1,5 +1,5 @@
 import { Injectable, signal, computed } from '@angular/core';
-import type { Mailbox } from '@imap-mail/shared';
+import type { Mailbox } from '@vellum/shared';
 
 @Injectable({ providedIn: 'root' })
 export class MailboxState {

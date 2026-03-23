@@ -10,6 +10,7 @@ vi.mock('imapflow', () => {
       connect: vi.fn().mockResolvedValue(undefined),
       logout: vi.fn().mockResolvedValue(undefined),
       close: vi.fn(),
+      on: vi.fn(),
       authenticated: true,
       usable: true,
     })),

@@ -1,5 +1,5 @@
 import { Injectable, signal, computed } from '@angular/core';
-import type { Account } from '@imap-mail/shared';
+import type { Account } from '@vellum/shared';
 
 @Injectable({ providedIn: 'root' })
 export class AccountState {

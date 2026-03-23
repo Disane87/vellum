@@ -2,18 +2,19 @@ import { Component, inject, signal, HostListener } from '@angular/core';
 import { FormsModule } from '@angular/forms';
 import { SearchService } from '../../core/services/search.service';
 import { UiState } from '../../core/state/ui.state';
+import { IconComponent } from '../../shared/components/icon.component';
 
 @Component({
   selector: 'app-search-bar',
   standalone: true,
-  imports: [FormsModule],
+  imports: [FormsModule, IconComponent],
   template: `
     @if (isOpen()) {
       <div class="fixed inset-0 z-50 flex items-start justify-center pt-20">
         <div class="fixed inset-0 bg-black/50" (click)="close()"></div>
         <div class="relative z-50 w-full max-w-lg rounded-lg border border-border bg-card shadow-lg">
           <div class="flex items-center gap-2 p-3">
-            <span class="text-muted-foreground">🔍</span>
+            <app-icon name="search" [size]="18" class="text-muted-foreground" />
             <input
               class="flex-1 bg-transparent text-sm focus:outline-none"
               [(ngModel)]="query"

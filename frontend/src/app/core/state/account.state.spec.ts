@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { AccountState } from './account.state';
-import type { Account } from '@imap-mail/shared';
+import type { Account } from '@vellum/shared';
 
 const mockAccount: Account = {
   id: 'acc-1',

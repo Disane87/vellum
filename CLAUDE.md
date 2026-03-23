@@ -1,14 +1,15 @@
-# IMAP Mail Client
+# Vellum
 
 ## Projekt-Übersicht
-Vollständiger Web-basierter IMAP/SMTP E-Mail-Client mit Angular Frontend und Fastify Backend.
+Desktop E-Mail-Client (Electron) mit IMAP/SMTP, Angular Frontend und NestJS Backend.
 
 ## Tech Stack
-- **Frontend**: Angular 19+, Tailwind CSS v4, ZardUI (@ngzard/ui), Lucide Icons
-- **Backend**: Fastify, ImapFlow, Nodemailer, mailparser
-- **Shared Types**: npm Workspace `@imap-mail/shared`
-- **Testing**: Vitest (Backend), Jest (Frontend Unit), Playwright (E2E)
-- **Realtime**: WebSockets via @fastify/websocket + IMAP IDLE
+- **Frontend**: Angular 21+, Tailwind CSS v4, ZardUI (@ngzard/ui), Lucide Icons
+- **Backend**: NestJS, ImapFlow, Nodemailer, mailparser
+- **Desktop**: Electron
+- **Shared Types**: npm Workspace `@vellum/shared`
+- **Testing**: Vitest (Backend + Frontend), Playwright (E2E)
+- **Realtime**: WebSockets via @nestjs/websockets + IMAP IDLE
 
 ## Monorepo-Struktur
 ```
@@ -47,7 +48,8 @@ cd packages/shared && npm run build  # Types kompilieren
 
 ## Wichtige Dateien
 - `packages/shared/src/models/` - Alle Datenmodelle
-- `backend/src/services/imap.service.ts` - IMAP-Kernlogik
-- `backend/src/services/smtp.service.ts` - SMTP-Sendelogik
+- `backend/src/imap/imap.service.ts` - IMAP-Kernlogik
+- `backend/src/send/smtp.service.ts` - SMTP-Sendelogik
 - `frontend/src/app/features/layout/shell.component.ts` - Haupt-Layout
 - `frontend/src/app/core/state/` - Signal-basierter State
+- `electron/main.ts` - Electron Main Process

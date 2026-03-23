@@ -9,7 +9,7 @@ import {
 } from '@nestjs/websockets';
 import { Server, WebSocket } from 'ws';
 import { IdleService } from './idle.service';
-import type { WsEvent, WsEventType } from '@imap-mail/shared';
+import type { WsEvent, WsEventType } from '@vellum/shared';
 
 interface ClientInfo {
   accountId?: string;

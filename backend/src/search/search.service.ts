@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { ImapService } from '../imap/imap.service';
-import type { SearchQuery, SearchResult, MessageEnvelope } from '@imap-mail/shared';
+import type { SearchQuery, SearchResult, MessageEnvelope } from '@vellum/shared';
 
 @Injectable()
 export class SearchService {

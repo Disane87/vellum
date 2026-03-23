@@ -1,6 +1,6 @@
 import { Controller, Post, Body, Param } from '@nestjs/common';
 import { SearchService } from './search.service';
-import type { SearchQuery, SearchResult } from '@imap-mail/shared';
+import type { SearchQuery, SearchResult } from '@vellum/shared';
 
 @Controller('accounts/:accountId/search')
 export class SearchController {

@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from './api.service';
 import { AccountState } from '../state/account.state';
-import type { Account, AccountCreateDto, ConnectionTestResult } from '@imap-mail/shared';
+import type { Account, AccountCreateDto, ConnectionTestResult } from '@vellum/shared';
 
 @Injectable({ providedIn: 'root' })
 export class AccountService {

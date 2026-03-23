@@ -12,7 +12,7 @@ import {
 import { AccountService } from './account.service';
 import { ImapService } from '../imap/imap.service';
 import { SmtpService } from '../send/smtp.service';
-import type { AccountCreateDto, AccountUpdateDto, ConnectionTestResult } from '@imap-mail/shared';
+import type { AccountCreateDto, AccountUpdateDto, ConnectionTestResult } from '@vellum/shared';
 
 @Controller('accounts')
 export class AccountController {

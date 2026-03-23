@@ -1,5 +1,5 @@
 import { Injectable, signal, computed } from '@angular/core';
-import type { MessageEnvelope, MessageFull } from '@imap-mail/shared';
+import type { MessageEnvelope, MessageFull } from '@vellum/shared';
 
 @Injectable({ providedIn: 'root' })
 export class MessageState {

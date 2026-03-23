@@ -1,6 +1,6 @@
 import { TestBed } from '@angular/core/testing';
 import { MessageState } from './message.state';
-import type { MessageEnvelope } from '@imap-mail/shared';
+import type { MessageEnvelope } from '@vellum/shared';
 
 const mockMessage: MessageEnvelope = {
   uid: 1,

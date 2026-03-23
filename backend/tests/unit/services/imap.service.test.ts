@@ -3,6 +3,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { ImapService } from '../../../src/imap/imap.service';
 import { ConnectionPoolService } from '../../../src/imap/connection-pool.service';
 import { AccountService } from '../../../src/account/account.service';
+import { CacheDbService } from '../../../src/cache/cache-db.service';
 import { createMockImapFlow } from '../../mocks/imap-flow.mock';
 
 describe('ImapService', () => {
@@ -47,6 +48,22 @@ describe('ImapService', () => {
         ImapService,
         { provide: ConnectionPoolService, useValue: poolService },
         { provide: AccountService, useValue: accountService },
+        {
+          provide: CacheDbService,
+          useValue: {
+            getMailboxes: vi.fn().mockReturnValue(null),
+            setMailboxes: vi.fn(),
+            getMessageList: vi.fn().mockReturnValue(null),
+            upsertMessages: vi.fn(),
+            getFullMessage: vi.fn().mockReturnValue(null),
+            setFullMessage: vi.fn(),
+            deleteMessages: vi.fn(),
+            setLastSync: vi.fn(),
+            getHighestUid: vi.fn().mockReturnValue(0),
+            updateMailboxCounts: vi.fn(),
+            addKnownContact: vi.fn(),
+          },
+        },
       ],
     }).compile();
 
@@ -80,14 +97,13 @@ describe('ImapService', () => {
         },
       ]);
 
-      mockClient.status.mockResolvedValue({ messages: 42, unseen: 5 });
-
       const result = await service.listMailboxes('acc-1');
 
       expect(result).toHaveLength(2);
       expect(result[0].path).toBe('INBOX');
-      expect(result[0].totalMessages).toBe(42);
-      expect(result[0].unseenMessages).toBe(5);
+      // listMailboxes no longer fetches status — counts are 0
+      expect(result[0].totalMessages).toBe(0);
+      expect(result[0].unseenMessages).toBe(0);
       expect(poolService.acquire).toHaveBeenCalled();
       expect(poolService.release).toHaveBeenCalled();
     });
@@ -147,7 +163,14 @@ describe('ImapService', () => {
         },
         flags: new Set(['\\Seen']),
         size: 1024,
-        source: Buffer.from('From: alice@example.com\r\nSubject: Test\r\n\r\nHello World'),
+        source: Buffer.from(
+          'From: alice@example.com\r\n' +
+          'To: user@example.com\r\n' +
+          'Subject: Test\r\n' +
+          'Content-Type: text/plain; charset=utf-8\r\n' +
+          '\r\n' +
+          'Hello World, this is the email body.',
+        ),
         bodyStructure: { childNodes: [] },
       });
 
@@ -156,6 +179,83 @@ describe('ImapService', () => {
       expect(result).toBeDefined();
       expect(result!.uid).toBe(100);
       expect(result!.subject).toBe('Test Subject');
+      expect(result!.bodyText).toContain('Hello World');
+      expect(result!.preview).toContain('Hello World');
+    });
+
+    it('should parse HTML email body correctly', async () => {
+      const htmlMime =
+        'From: alice@example.com\r\n' +
+        'Subject: HTML Test\r\n' +
+        'Content-Type: text/html; charset=utf-8\r\n' +
+        '\r\n' +
+        '<html><body><h1>Hello</h1><p>This is <b>HTML</b> content.</p></body></html>';
+
+      mockClient.fetchOne.mockResolvedValue({
+        uid: 200,
+        seq: 10,
+        envelope: {
+          messageId: '<msg2@example.com>',
+          subject: 'HTML Test',
+          from: [{ address: 'alice@example.com' }],
+          to: [{ address: 'user@example.com' }],
+          date: new Date('2026-03-22T10:00:00Z'),
+        },
+        flags: new Set([]),
+        size: 2048,
+        source: Buffer.from(htmlMime),
+        bodyStructure: {},
+      });
+
+      const result = await service.getMessage('acc-1', 'INBOX', 200);
+
+      expect(result).toBeDefined();
+      expect(result!.bodyHtml).toContain('<h1>Hello</h1>');
+      expect(result!.bodyHtml).toContain('<b>HTML</b>');
+    });
+
+    it('should parse multipart email with attachments', async () => {
+      const boundary = '----=_Part_123';
+      const multipartMime =
+        'From: alice@example.com\r\n' +
+        'Subject: With Attachment\r\n' +
+        `Content-Type: multipart/mixed; boundary="${boundary}"\r\n` +
+        '\r\n' +
+        `--${boundary}\r\n` +
+        'Content-Type: text/plain; charset=utf-8\r\n' +
+        '\r\n' +
+        'Message with attachment.\r\n' +
+        `--${boundary}\r\n` +
+        'Content-Type: application/pdf; name="report.pdf"\r\n' +
+        'Content-Disposition: attachment; filename="report.pdf"\r\n' +
+        'Content-Transfer-Encoding: base64\r\n' +
+        '\r\n' +
+        'JVBERi0xLjQK\r\n' +
+        `--${boundary}--\r\n`;
+
+      mockClient.fetchOne.mockResolvedValue({
+        uid: 300,
+        seq: 5,
+        envelope: {
+          messageId: '<msg3@example.com>',
+          subject: 'With Attachment',
+          from: [{ address: 'alice@example.com' }],
+          to: [{ address: 'user@example.com' }],
+          date: new Date('2026-03-22T10:00:00Z'),
+        },
+        flags: new Set([]),
+        size: 4096,
+        source: Buffer.from(multipartMime),
+        bodyStructure: {},
+      });
+
+      const result = await service.getMessage('acc-1', 'INBOX', 300);
+
+      expect(result).toBeDefined();
+      expect(result!.bodyText).toContain('Message with attachment');
+      expect(result!.attachments).toHaveLength(1);
+      expect(result!.attachments[0].filename).toBe('report.pdf');
+      expect(result!.attachments[0].contentType).toBe('application/pdf');
     });
 
     it('should return null for non-existent message', async () => {
@@ -171,8 +271,9 @@ describe('ImapService', () => {
       await service.setFlags('acc-1', 'INBOX', [1, 2, 3], ['\\Seen'], 'add');
 
       expect(mockClient.messageFlagsAdd).toHaveBeenCalledWith(
-        { uid: [1, 2, 3] },
+        '1,2,3',
         ['\\Seen'],
+        { uid: true },
       );
     });
 
@@ -180,8 +281,9 @@ describe('ImapService', () => {
       await service.setFlags('acc-1', 'INBOX', [1], ['\\Flagged'], 'remove');
 
       expect(mockClient.messageFlagsRemove).toHaveBeenCalledWith(
-        { uid: [1] },
+        '1',
         ['\\Flagged'],
+        { uid: true },
       );
     });
   });
@@ -191,8 +293,9 @@ describe('ImapService', () => {
       await service.moveMessages('acc-1', 'INBOX', [1, 2], 'Trash');
 
       expect(mockClient.messageMove).toHaveBeenCalledWith(
-        { uid: [1, 2] },
+        '1,2',
         'Trash',
+        { uid: true },
       );
     });
   });
@@ -202,8 +305,9 @@ describe('ImapService', () => {
       await service.copyMessages('acc-1', 'INBOX', [1, 2], 'Archive');
 
       expect(mockClient.messageCopy).toHaveBeenCalledWith(
-        { uid: [1, 2] },
+        '1,2',
         'Archive',
+        { uid: true },
       );
     });
   });
@@ -212,7 +316,7 @@ describe('ImapService', () => {
     it('should delete messages', async () => {
       await service.deleteMessages('acc-1', 'INBOX', [1, 2]);
 
-      expect(mockClient.messageDelete).toHaveBeenCalledWith({ uid: [1, 2] });
+      expect(mockClient.messageDelete).toHaveBeenCalledWith('1,2', { uid: true });
     });
   });
 

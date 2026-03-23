@@ -9,3 +9,7 @@ data/
 *.tsbuildinfo
 .DS_Store
 Thumbs.db
+
+# Electron
+release/
+electron/dist/

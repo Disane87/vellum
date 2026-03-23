@@ -2,61 +2,73 @@ import { Component, inject } from '@angular/core';
 import { UiState } from '../../../core/state/ui.state';
 import { MessageState } from '../../../core/state/message.state';
 import { MessageService } from '../../../core/services/message.service';
-import { MessageFlag } from '@imap-mail/shared';
+import { IconComponent } from '../../../shared/components/icon.component';
+import { MessageFlag } from '@vellum/shared';
 
 @Component({
   selector: 'app-toolbar',
   standalone: true,
+  imports: [IconComponent],
   template: `
-    <div class="flex items-center gap-2 border-b border-border px-4 py-2 bg-card">
+    <div class="flex items-center gap-1 border-b border-border px-4 py-2 bg-card">
       <button
-        class="rounded-md px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
+        class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
         (click)="compose()"
       >
-        ✉ Neue Nachricht
+        <app-icon name="mail-plus" [size]="16" />
+        Neue Nachricht
       </button>
 
       <div class="mx-2 h-5 w-px bg-border"></div>
 
       <button
-        class="rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors disabled:opacity-50"
+        class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors disabled:opacity-50"
         [disabled]="!messageState.hasSelection()"
         (click)="reply()"
+        title="Antworten"
       >
-        ↩ Antworten
+        <app-icon name="reply" [size]="16" />
+        <span class="hidden sm:inline">Antworten</span>
       </button>
 
       <button
-        class="rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors disabled:opacity-50"
+        class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors disabled:opacity-50"
         [disabled]="!messageState.hasSelection()"
         (click)="forward()"
+        title="Weiterleiten"
       >
-        ↪ Weiterleiten
+        <app-icon name="forward" [size]="16" />
+        <span class="hidden sm:inline">Weiterleiten</span>
       </button>
 
       <button
-        class="rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors disabled:opacity-50 text-destructive"
+        class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors disabled:opacity-50 text-destructive"
         [disabled]="!messageState.hasSelection()"
         (click)="deleteSelected()"
+        title="Löschen"
       >
-        🗑 Löschen
+        <app-icon name="trash" [size]="16" />
+        <span class="hidden sm:inline">Löschen</span>
       </button>
 
       <button
-        class="rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors disabled:opacity-50"
+        class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors disabled:opacity-50"
         [disabled]="!messageState.hasSelection()"
         (click)="markRead()"
+        title="Als gelesen markieren"
       >
-        ✓ Gelesen
+        <app-icon name="mail-open" [size]="16" />
+        <span class="hidden sm:inline">Gelesen</span>
       </button>
 
       <div class="flex-1"></div>
 
       <button
-        class="rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors"
+        class="rounded-md p-1.5 hover:bg-accent transition-colors"
         (click)="uiState.toggleSidebar()"
+        title="Sidebar ein-/ausblenden"
       >
-        ☰
+        <app-icon name="menu" [size]="18" />
       </button>
     </div>
   `,

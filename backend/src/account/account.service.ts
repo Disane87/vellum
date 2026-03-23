@@ -3,9 +3,19 @@ import { CredentialService } from '../imap/credential.service';
 import { v4 as uuidv4 } from 'uuid';
 import * as fs from 'fs';
 import * as path from 'path';
-import type { Account, AccountCreateDto, AccountUpdateDto } from '@imap-mail/shared';
+import type { Account, AccountCreateDto, AccountUpdateDto } from '@vellum/shared';
 
-const DATA_DIR = path.join(process.cwd(), 'data');
+// Find the backend workspace root by looking for nest-cli.json
+function findBackendRoot(): string {
+  let dir = __dirname;
+  for (let i = 0; i < 5; i++) {
+    if (fs.existsSync(path.join(dir, 'nest-cli.json'))) return dir;
+    dir = path.dirname(dir);
+  }
+  return process.cwd();
+}
+
+const DATA_DIR = path.join(findBackendRoot(), 'data');
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
 
 @Injectable()

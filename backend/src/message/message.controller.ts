@@ -14,7 +14,7 @@ import {
 import { Response } from 'express';
 import { MessageService } from './message.service';
 import { AttachmentService } from './attachment.service';
-import type { MessageMoveDto, MessageCopyDto, MessageFlagDto } from '@imap-mail/shared';
+import type { MessageMoveDto, MessageCopyDto, MessageFlagDto } from '@vellum/shared';
 
 @Controller('accounts/:accountId/mailboxes/:mailbox/messages')
 export class MessageController {

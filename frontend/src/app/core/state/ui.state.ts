@@ -1,5 +1,5 @@
 import { Injectable, signal } from '@angular/core';
-import type { SearchQuery } from '@imap-mail/shared';
+import type { SearchQuery } from '@vellum/shared';
 
 export type ComposerMode = 'new' | 'reply' | 'replyAll' | 'forward';
 

@@ -1,94 +1,128 @@
-import { Injectable, OnModuleDestroy } from '@nestjs/common';
+import { Injectable, OnModuleDestroy, Logger } from '@nestjs/common';
 import { ImapFlow } from 'imapflow';
-import { createPool, Pool } from 'generic-pool';
 import { CredentialService } from './credential.service';
-import type { ImapConfig } from '@imap-mail/shared';
+import type { ImapConfig } from '@vellum/shared';
+
+interface ManagedConnection {
+  client: ImapFlow;
+  busy: boolean;
+  queue: Array<(client: ImapFlow) => void>;
+}
 
 @Injectable()
 export class ConnectionPoolService implements OnModuleDestroy {
-  private pools = new Map<string, Pool<ImapFlow>>();
+  private readonly logger = new Logger(ConnectionPoolService.name);
+  private connections = new Map<string, ManagedConnection>();
+  private connecting = new Map<string, Promise<ImapFlow>>();
 
   constructor(private readonly credentialService: CredentialService) {}
 
   async acquire(accountId: string, config: ImapConfig): Promise<ImapFlow> {
-    let pool = this.pools.get(accountId);
-    if (!pool) {
-      pool = this.createPoolForAccount(accountId, config);
-      this.pools.set(accountId, pool);
+    const existing = this.connections.get(accountId);
+
+    // If we have a usable connection that's not busy, return it
+    if (existing?.client?.usable && !existing.busy) {
+      existing.busy = true;
+      return existing.client;
     }
-    return pool.acquire();
+
+    // If we have a usable connection that IS busy, queue up
+    if (existing?.client?.usable && existing.busy) {
+      return new Promise<ImapFlow>((resolve) => {
+        existing.queue.push(resolve);
+      });
+    }
+
+    // No connection or dead connection — create one
+    // Dedup: if we're already connecting, wait for that
+    let connectPromise = this.connecting.get(accountId);
+    if (!connectPromise) {
+      connectPromise = this.createConnection(accountId, config);
+      this.connecting.set(accountId, connectPromise);
+    }
+
+    try {
+      const client = await connectPromise;
+      return client;
+    } finally {
+      this.connecting.delete(accountId);
+    }
   }
 
-  async release(accountId: string, client: ImapFlow): Promise<void> {
-    const pool = this.pools.get(accountId);
-    if (pool) {
-      await pool.release(client);
+  async release(accountId: string, _client: ImapFlow): Promise<void> {
+    const managed = this.connections.get(accountId);
+    if (!managed) return;
+
+    // If someone is queued, give them the connection
+    const next = managed.queue.shift();
+    if (next) {
+      next(managed.client);
+    } else {
+      managed.busy = false;
     }
   }
 
   async destroyPool(accountId: string): Promise<void> {
-    const pool = this.pools.get(accountId);
-    if (pool) {
-      await pool.drain();
-      await pool.clear();
-      this.pools.delete(accountId);
+    const managed = this.connections.get(accountId);
+    if (managed) {
+      try { await managed.client.logout(); } catch {
+        try { managed.client.close(); } catch { /* ignore */ }
+      }
+      // Reject all queued
+      for (const resolve of managed.queue) {
+        resolve(null as any); // will fail, but prevents hanging
+      }
+      this.connections.delete(accountId);
     }
   }
 
   async onModuleDestroy(): Promise<void> {
-    for (const [accountId] of this.pools) {
+    for (const [accountId] of this.connections) {
       await this.destroyPool(accountId);
     }
   }
 
-  private createPoolForAccount(accountId: string, config: ImapConfig): Pool<ImapFlow> {
-    const credentialService = this.credentialService;
+  private async createConnection(accountId: string, config: ImapConfig): Promise<ImapFlow> {
+    // Clean up old dead connection
+    const old = this.connections.get(accountId);
+    if (old) {
+      try { old.client.close(); } catch { /* ignore */ }
+      this.connections.delete(accountId);
+    }
 
-    return createPool<ImapFlow>(
-      {
-        async create(): Promise<ImapFlow> {
-          const auth =
-            config.auth.type === 'password'
-              ? {
-                  user: config.auth.user,
-                  pass: config.auth.pass
-                    ? credentialService.decrypt(config.auth.pass)
-                    : '',
-                }
-              : {
-                  user: config.auth.user,
-                  accessToken: config.auth.accessToken || '',
-                };
+    this.logger.log(`Creating IMAP connection for ${accountId}`);
 
-          const client = new ImapFlow({
-            host: config.host,
-            port: config.port,
-            secure: config.secure,
-            auth,
-            logger: false,
-          });
+    const auth = config.auth.type === 'password'
+      ? {
+          user: config.auth.user,
+          pass: config.auth.pass ? this.credentialService.decrypt(config.auth.pass) : '',
+        }
+      : {
+          user: config.auth.user,
+          accessToken: config.auth.accessToken || '',
+        };
 
-          await client.connect();
-          return client;
-        },
-        async destroy(client: ImapFlow): Promise<void> {
-          try {
-            await client.logout();
-          } catch {
-            client.close();
-          }
-        },
-        async validate(client: ImapFlow): Promise<boolean> {
-          return client.usable === true;
-        },
-      },
-      {
-        min: 0,
-        max: 3,
-        acquireTimeoutMillis: 30000,
-        idleTimeoutMillis: 300000,
-        testOnBorrow: true,
-      },
-    );
+    const client = new ImapFlow({
+      host: config.host,
+      port: config.port,
+      secure: config.secure,
+      auth,
+      logger: false,
+      emitLogs: false,
+    });
+
+    await client.connect();
+    this.logger.log(`IMAP connection established for ${accountId}`);
+
+    const managed: ManagedConnection = { client, busy: true, queue: [] };
+    this.connections.set(accountId, managed);
+
+    // Auto-cleanup on disconnect
+    client.on('close', () => {
+      this.logger.warn(`IMAP connection closed for ${accountId}`);
+      this.connections.delete(accountId);
+    });
+
+    return client;
   }
 }

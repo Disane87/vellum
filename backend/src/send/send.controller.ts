@@ -8,7 +8,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { SmtpService } from './smtp.service';
-import type { ComposeMessage } from '@imap-mail/shared';
+import type { ComposeMessage } from '@vellum/shared';
 
 @Controller('accounts/:accountId')
 export class SendController {

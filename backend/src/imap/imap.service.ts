@@ -1,46 +1,115 @@
-import { Injectable } from '@nestjs/common';
-import { ImapFlow } from 'imapflow';
+import { Injectable, Logger } from '@nestjs/common';
+import { ImapFlow, type FetchMessageObject } from 'imapflow';
+import { simpleParser, type ParsedMail, type Attachment as ParsedAttachment } from 'mailparser';
 import { ConnectionPoolService } from './connection-pool.service';
 import { AccountService } from '../account/account.service';
+import { CacheDbService } from '../cache/cache-db.service';
 import type {
   Mailbox,
   MessageEnvelope,
   MessageFull,
   MessageListResponse,
   Address,
-} from '@imap-mail/shared';
+  Attachment,
+} from '@vellum/shared';
 
 @Injectable()
 export class ImapService {
+  private readonly logger = new Logger(ImapService.name);
+
   constructor(
     private readonly pool: ConnectionPoolService,
     private readonly accountService: AccountService,
+    private readonly cacheDb: CacheDbService,
   ) {}
 
   async listMailboxes(accountId: string): Promise<Mailbox[]> {
+    // Cache-first: return cached mailboxes instantly, refresh in background
+    const cached = this.cacheDb.getMailboxes(accountId);
+    if (cached) {
+      this.logger.debug(`Mailboxes served from cache for ${accountId}`);
+      // Trigger background refresh (don't await)
+      this.refreshMailboxes(accountId).catch(() => {});
+      return cached;
+    }
+
+    // No cache — must fetch from IMAP
+    return this.refreshMailboxes(accountId);
+  }
+
+  private async refreshMailboxes(accountId: string): Promise<Mailbox[]> {
     return this.withClient(accountId, async (client) => {
       const list = await client.list();
 
-      const mailboxes: Mailbox[] = [];
-      for (const item of list) {
-        const status = await client.status(item.path, { messages: true, unseen: true });
-        mailboxes.push({
-          path: item.path,
-          name: item.name,
-          delimiter: item.delimiter || '/',
-          flags: Array.from(item.flags || []),
-          specialUse: item.specialUse as Mailbox['specialUse'],
-          totalMessages: status.messages ?? 0,
-          unseenMessages: status.unseen ?? 0,
-          subscribed: item.subscribed !== false,
-        });
-      }
+      const mailboxes: Mailbox[] = list.map((item) => ({
+        path: item.path,
+        name: item.name,
+        delimiter: item.delimiter || '/',
+        flags: Array.from(item.flags || []),
+        specialUse: item.specialUse as Mailbox['specialUse'],
+        totalMessages: 0,
+        unseenMessages: 0,
+        subscribed: item.subscribed !== false,
+      }));
 
+      this.cacheDb.setMailboxes(accountId, mailboxes);
       return mailboxes;
     });
   }
 
+  async getMailboxStatus(
+    accountId: string,
+    mailboxPath: string,
+  ): Promise<{ messages: number; unseen: number }> {
+    return this.withClient(accountId, async (client) => {
+      try {
+        const status = await client.status(mailboxPath, { messages: true, unseen: true });
+        return { messages: status.messages ?? 0, unseen: status.unseen ?? 0 };
+      } catch {
+        return { messages: 0, unseen: 0 };
+      }
+    });
+  }
+
+  async getMailboxStatusBatch(
+    accountId: string,
+    paths: string[],
+  ): Promise<Record<string, { messages: number; unseen: number }>> {
+    return this.withClient(accountId, async (client) => {
+      const result: Record<string, { messages: number; unseen: number }> = {};
+      // Sequentially on ONE connection — no extra connections needed
+      for (const path of paths) {
+        try {
+          const status = await client.status(path, { messages: true, unseen: true });
+          result[path] = { messages: status.messages ?? 0, unseen: status.unseen ?? 0 };
+        } catch {
+          result[path] = { messages: 0, unseen: 0 };
+        }
+      }
+      return result;
+    });
+  }
+
   async listMessages(
+    accountId: string,
+    mailboxPath: string,
+    page: number,
+    pageSize: number,
+  ): Promise<MessageListResponse> {
+    // Cache-first
+    const cached = this.cacheDb.getMessageList(accountId, mailboxPath, page, pageSize);
+    if (cached) {
+      this.logger.debug(`Messages served from cache: ${mailboxPath} page ${page}`);
+      // Background sync for fresh data
+      this.syncMessages(accountId, mailboxPath).catch(() => {});
+      return { ...cached, page, pageSize, mailbox: mailboxPath };
+    }
+
+    // No cache — fetch from IMAP and cache
+    return this.fetchAndCacheMessages(accountId, mailboxPath, page, pageSize);
+  }
+
+  private async fetchAndCacheMessages(
     accountId: string,
     mailboxPath: string,
     page: number,
@@ -55,7 +124,6 @@ export class ImapService {
         return { messages: [], total: 0, page, pageSize, mailbox: mailboxPath };
       }
 
-      // Fetch newest messages first using sequence numbers
       const start = Math.max(1, total - (page * pageSize) + 1);
       const end = Math.max(1, total - ((page - 1) * pageSize));
       const range = `${start}:${end}`;
@@ -70,17 +138,93 @@ export class ImapService {
       });
 
       for await (const msg of fetchIterator) {
-        messages.push(this.mapEnvelope(msg));
+        messages.push(this.mapEnvelope(msg as any));
       }
 
-      // Sort by date descending
       messages.sort(
         (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
       );
 
       await client.mailboxClose();
+
+      // Cache the fetched messages + collect contacts
+      this.cacheDb.upsertMessages(accountId, mailboxPath, messages);
+      this.cacheDb.setLastSync(accountId, mailboxPath);
+      this.collectContacts(accountId, messages);
+
+      // Prefetch bodies for the first few messages in background
+      this.prefetchBodies(accountId, mailboxPath, messages.slice(0, 5)).catch(() => {});
+
       return { messages, total, page, pageSize, mailbox: mailboxPath };
     });
+  }
+
+  private async prefetchBodies(
+    accountId: string,
+    mailboxPath: string,
+    messages: MessageEnvelope[],
+  ): Promise<void> {
+    for (const msg of messages) {
+      // Skip if already cached
+      if (this.cacheDb.getFullMessage(accountId, mailboxPath, msg.uid)) continue;
+
+      try {
+        await this.getMessage(accountId, mailboxPath, msg.uid);
+        this.logger.debug(`Prefetched body for UID ${msg.uid}`);
+      } catch {
+        // Non-critical — skip silently
+      }
+    }
+  }
+
+  private async syncMessages(accountId: string, mailboxPath: string): Promise<void> {
+    try {
+      const highestUid = this.cacheDb.getHighestUid(accountId, mailboxPath);
+
+      await this.withClient(accountId, async (client) => {
+        const mailbox = await client.mailboxOpen(mailboxPath);
+        const total = mailbox.exists ?? 0;
+
+        if (total === 0) {
+          await client.mailboxClose();
+          return;
+        }
+
+        // Fetch only messages newer than what we have cached
+        if (highestUid > 0) {
+          const range = `${highestUid + 1}:*`;
+          const newMessages: MessageEnvelope[] = [];
+
+          try {
+            const fetchIterator = client.fetch(range, {
+              uid: true,
+              envelope: true,
+              flags: true,
+              size: true,
+              bodyStructure: true,
+            });
+
+            for await (const msg of fetchIterator) {
+              if ((msg as any).uid > highestUid) {
+                newMessages.push(this.mapEnvelope(msg as any));
+              }
+            }
+          } catch {
+            // Range might be invalid if no new messages
+          }
+
+          if (newMessages.length > 0) {
+            this.logger.log(`Synced ${newMessages.length} new messages in ${mailboxPath}`);
+            this.cacheDb.upsertMessages(accountId, mailboxPath, newMessages);
+          }
+        }
+
+        this.cacheDb.setLastSync(accountId, mailboxPath);
+        await client.mailboxClose();
+      });
+    } catch (err) {
+      this.logger.warn(`Background sync failed for ${mailboxPath}: ${(err as Error).message}`);
+    }
   }
 
   async getMessage(
@@ -88,6 +232,13 @@ export class ImapService {
     mailboxPath: string,
     uid: number,
   ): Promise<MessageFull | null> {
+    // Cache-first for full messages (body is expensive to parse)
+    const cached = this.cacheDb.getFullMessage(accountId, mailboxPath, uid);
+    if (cached) {
+      this.logger.debug(`Message ${uid} served from cache`);
+      return cached;
+    }
+
     return this.withClient(accountId, async (client) => {
       await client.mailboxOpen(mailboxPath);
 
@@ -108,18 +259,76 @@ export class ImapService {
 
       if (!msg) return null;
 
-      const envelope = this.mapEnvelope(msg);
-      const bodyText = msg.source ? msg.source.toString('utf-8') : '';
+      const envelope = this.mapEnvelope(msg as any);
 
-      return {
+      // Parse the MIME source with mailparser
+      let bodyHtml: string | undefined;
+      let bodyText: string | undefined;
+      let attachments: Attachment[] = [];
+      let headers: Record<string, string> = {};
+      let inReplyTo: string | undefined;
+      let references: string[] | undefined;
+
+      if (msg.source) {
+        const parsed: ParsedMail = await simpleParser(msg.source);
+
+        bodyHtml = parsed.html || undefined;
+        bodyText = parsed.text || undefined;
+
+        // Extract attachments metadata
+        if (parsed.attachments && parsed.attachments.length > 0) {
+          attachments = parsed.attachments.map((att: ParsedAttachment, index: number) => ({
+            id: att.contentId || att.checksum || String(index),
+            filename: att.filename || `attachment-${index}`,
+            contentType: att.contentType || 'application/octet-stream',
+            size: att.size || 0,
+            contentDisposition: (att.contentDisposition as 'attachment' | 'inline') || 'attachment',
+            cid: att.contentId || undefined,
+          }));
+        }
+
+        // Extract headers
+        if (parsed.headers) {
+          for (const [key, value] of parsed.headers) {
+            if (typeof value === 'string') {
+              headers[key] = value;
+            } else if (value && typeof value === 'object' && 'text' in value) {
+              headers[key] = (value as { text: string }).text;
+            }
+          }
+        }
+
+        inReplyTo = parsed.inReplyTo
+          ? (typeof parsed.inReplyTo === 'string' ? parsed.inReplyTo : undefined)
+          : undefined;
+
+        if (parsed.references) {
+          references = Array.isArray(parsed.references)
+            ? parsed.references
+            : [parsed.references];
+        }
+      }
+
+      // Build preview from text body if not already set
+      const preview = bodyText
+        ? bodyText.substring(0, 200).replace(/\s+/g, ' ').trim()
+        : '';
+
+      const fullMessage: MessageFull = {
         ...envelope,
-        bodyHtml: undefined,
+        preview: preview || envelope.preview,
+        bodyHtml,
         bodyText,
-        attachments: [],
-        headers: {},
-        inReplyTo: msg.envelope?.inReplyTo || undefined,
-        references: undefined,
+        attachments,
+        headers,
+        inReplyTo,
+        references,
       };
+
+      // Cache the full message
+      this.cacheDb.setFullMessage(accountId, mailboxPath, uid, fullMessage);
+
+      return fullMessage;
     });
   }
 
@@ -133,10 +342,11 @@ export class ImapService {
     return this.withClient(accountId, async (client) => {
       await client.mailboxOpen(mailboxPath);
 
+      const range = uids.join(',');
       if (action === 'add') {
-        await client.messageFlagsAdd({ uid: uids }, flags);
+        await client.messageFlagsAdd(range, flags, { uid: true });
       } else {
-        await client.messageFlagsRemove({ uid: uids }, flags);
+        await client.messageFlagsRemove(range, flags, { uid: true });
       }
 
       await client.mailboxClose();
@@ -151,7 +361,7 @@ export class ImapService {
   ): Promise<void> {
     return this.withClient(accountId, async (client) => {
       await client.mailboxOpen(mailboxPath);
-      await client.messageMove({ uid: uids }, destination);
+      await client.messageMove(uids.join(','), destination, { uid: true });
       await client.mailboxClose();
     });
   }
@@ -164,7 +374,7 @@ export class ImapService {
   ): Promise<void> {
     return this.withClient(accountId, async (client) => {
       await client.mailboxOpen(mailboxPath);
-      await client.messageCopy({ uid: uids }, destination);
+      await client.messageCopy(uids.join(','), destination, { uid: true });
       await client.mailboxClose();
     });
   }
@@ -174,11 +384,12 @@ export class ImapService {
     mailboxPath: string,
     uids: number[],
   ): Promise<void> {
-    return this.withClient(accountId, async (client) => {
+    await this.withClient(accountId, async (client) => {
       await client.mailboxOpen(mailboxPath);
-      await client.messageDelete({ uid: uids });
+      await client.messageDelete(uids.join(','), { uid: true });
       await client.mailboxClose();
     });
+    this.cacheDb.deleteMessages(accountId, mailboxPath, uids);
   }
 
   async createMailbox(accountId: string, path: string): Promise<void> {
@@ -212,7 +423,6 @@ export class ImapService {
     return this.withClient(accountId, async (client) => {
       await client.mailboxOpen(mailboxPath);
       const result = await client.download(String(uid), partId, { uid: true });
-      // Note: don't close mailbox here, stream is still active
       return result;
     });
   }
@@ -224,9 +434,9 @@ export class ImapService {
   ): Promise<number[]> {
     return this.withClient(accountId, async (client) => {
       await client.mailboxOpen(mailboxPath);
-      const results = await client.search(criteria, { uid: true });
+      const results = await client.search(criteria as any, { uid: true });
       await client.mailboxClose();
-      return results;
+      return results || [];
     });
   }
 
@@ -290,5 +500,20 @@ export class ImapService {
         (node) => node.disposition === 'attachment',
       ) ?? false
     );
+  }
+
+  private collectContacts(accountId: string, messages: MessageEnvelope[]): void {
+    for (const msg of messages) {
+      for (const addr of msg.from) {
+        if (addr.address) {
+          this.cacheDb.addKnownContact(accountId, addr.address, addr.name);
+        }
+      }
+      for (const addr of msg.to || []) {
+        if (addr.address) {
+          this.cacheDb.addKnownContact(accountId, addr.address, addr.name);
+        }
+      }
+    }
   }
 }

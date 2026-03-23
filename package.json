@@ -1,8 +1,9 @@
 {
-  "name": "imap-mail",
+  "name": "vellum",
   "version": "0.1.0",
   "private": true,
-  "description": "Web-based IMAP/SMTP email client",
+  "description": "A desktop email client for IMAP/SMTP",
+  "main": "electron/dist/main.js",
   "workspaces": [
     "packages/shared",
     "backend",
@@ -10,10 +11,68 @@
   ],
   "scripts": {
     "build:shared": "npm run build -w packages/shared",
+    "build:backend": "npm run build -w backend",
+    "build:frontend": "npm run build -w frontend",
+    "build:electron": "tsc -p electron/tsconfig.json",
+    "build": "npm run build:shared && npm run build:backend && npm run build:frontend && npm run build:electron",
+    "dev": "concurrently -n be,fe -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
+    "dev:electron": "concurrently -n be,fe,el -c blue,green,yellow \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run build:electron && electron .\"",
     "dev:backend": "npm run dev -w backend",
     "dev:frontend": "npm run dev -w frontend",
     "test:backend": "npm test -w backend",
     "test:frontend": "npm test -w frontend",
-    "test": "npm run test:backend && npm run test:frontend"
+    "test": "npm run test:backend && npm run test:frontend",
+    "dist": "npm run build && electron-builder",
+    "dist:win": "npm run build && electron-builder --win",
+    "dist:mac": "npm run build && electron-builder --mac",
+    "dist:linux": "npm run build && electron-builder --linux"
+  },
+  "build": {
+    "appId": "com.vellum.app",
+    "productName": "Vellum",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/dist/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "backend/dist",
+        "to": "backend/dist"
+      },
+      {
+        "from": "backend/node_modules",
+        "to": "backend/node_modules"
+      },
+      {
+        "from": "frontend/dist/vellum/browser",
+        "to": "frontend/browser"
+      }
+    ],
+    "win": {
+      "target": ["nsis"],
+      "icon": "frontend/public/favicon.ico"
+    },
+    "mac": {
+      "target": ["dmg"],
+      "category": "public.app-category.productivity"
+    },
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Office"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1",
+    "electron": "^35.0.0",
+    "electron-builder": "^26.0.0",
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
+    "semantic-release": "^24.0.0"
   }
 }

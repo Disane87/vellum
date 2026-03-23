@@ -1,5 +1,5 @@
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
-import type { WsEvent } from '@imap-mail/shared';
+import type { WsEvent } from '@vellum/shared';
 
 type EventCallback = (event: WsEvent) => void;
 

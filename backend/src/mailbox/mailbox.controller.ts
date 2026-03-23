@@ -10,7 +10,7 @@ import {
   HttpStatus,
 } from '@nestjs/common';
 import { MailboxService } from './mailbox.service';
-import type { MailboxCreateDto, MailboxRenameDto } from '@imap-mail/shared';
+import type { MailboxCreateDto, MailboxRenameDto } from '@vellum/shared';
 
 @Controller('accounts/:accountId/mailboxes')
 export class MailboxController {
@@ -19,6 +19,22 @@ export class MailboxController {
   @Get()
   async list(@Param('accountId') accountId: string) {
     return this.mailboxService.list(accountId);
+  }
+
+  @Get(':path/status')
+  async status(
+    @Param('accountId') accountId: string,
+    @Param('path') path: string,
+  ) {
+    return this.mailboxService.getStatus(accountId, decodeURIComponent(path));
+  }
+
+  @Post('status-batch')
+  async statusBatch(
+    @Param('accountId') accountId: string,
+    @Body() body: { paths: string[] },
+  ) {
+    return this.mailboxService.getStatusBatch(accountId, body.paths);
   }
 
   @Post()

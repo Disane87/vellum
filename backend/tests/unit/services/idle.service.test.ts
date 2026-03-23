@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { IdleService } from '../../../src/websocket/idle.service';
-import type { WsEvent, WsEventType } from '@imap-mail/shared';
+import type { WsEvent, WsEventType } from '@vellum/shared';
 
 describe('IdleService', () => {
   let service: IdleService;

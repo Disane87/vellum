@@ -9,11 +9,14 @@ import { SendModule } from './send/send.module';
 import { SearchModule } from './search/search.module';
 import { ImapModule } from './imap/imap.module';
 import { WebsocketModule } from './websocket/websocket.module';
+import { BimiModule } from './bimi/bimi.module';
+import { CacheModule } from './cache/cache.module';
 
 @Module({
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     ThrottlerModule.forRoot([{ ttl: 60000, limit: 100 }]),
+    CacheModule,
     ImapModule,
     AccountModule,
     MailboxModule,
@@ -21,6 +24,7 @@ import { WebsocketModule } from './websocket/websocket.module';
     SendModule,
     SearchModule,
     WebsocketModule,
+    BimiModule,
   ],
   controllers: [HealthController],
 })

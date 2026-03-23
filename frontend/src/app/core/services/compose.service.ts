@@ -2,7 +2,7 @@ import { Injectable, inject } from '@angular/core';
 import { firstValueFrom } from 'rxjs';
 import { ApiService } from './api.service';
 import { AccountState } from '../state/account.state';
-import type { ComposeMessage } from '@imap-mail/shared';
+import type { ComposeMessage } from '@vellum/shared';
 
 @Injectable({ providedIn: 'root' })
 export class ComposeService {

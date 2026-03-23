@@ -3,7 +3,7 @@ import { firstValueFrom } from 'rxjs';
 import { ApiService } from './api.service';
 import { AccountState } from '../state/account.state';
 import { MessageState } from '../state/message.state';
-import type { SearchQuery, SearchResult } from '@imap-mail/shared';
+import type { SearchQuery, SearchResult } from '@vellum/shared';
 
 @Injectable({ providedIn: 'root' })
 export class SearchService {
