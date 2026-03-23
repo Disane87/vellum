@@ -12,6 +12,14 @@ import { MessageFlag } from '@vellum/shared';
   template: `
     <div class="flex items-center gap-1 border-b border-border px-4 py-2 bg-card">
       <button
+        class="rounded-md p-1.5 hover:bg-accent transition-colors mr-1"
+        (click)="uiState.toggleSidebar()"
+        title="Sidebar ein-/ausblenden"
+      >
+        <app-icon name="menu" [size]="18" />
+      </button>
+
+      <button
         class="inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-sm font-medium bg-primary text-primary-foreground hover:bg-primary/90 transition-colors"
         (click)="compose()"
       >
@@ -19,57 +27,45 @@ import { MessageFlag } from '@vellum/shared';
         Neue Nachricht
       </button>
 
-      <div class="mx-2 h-5 w-px bg-border"></div>
-
-      <button
-        class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors disabled:opacity-50"
-        [disabled]="!messageState.hasSelection()"
-        (click)="reply()"
-        title="Antworten"
-      >
-        <app-icon name="reply" [size]="16" />
-        <span class="hidden sm:inline">Antworten</span>
-      </button>
-
-      <button
-        class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors disabled:opacity-50"
-        [disabled]="!messageState.hasSelection()"
-        (click)="forward()"
-        title="Weiterleiten"
-      >
-        <app-icon name="forward" [size]="16" />
-        <span class="hidden sm:inline">Weiterleiten</span>
-      </button>
-
-      <button
-        class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors disabled:opacity-50 text-destructive"
-        [disabled]="!messageState.hasSelection()"
-        (click)="deleteSelected()"
-        title="Löschen"
-      >
-        <app-icon name="trash" [size]="16" />
-        <span class="hidden sm:inline">Löschen</span>
-      </button>
-
-      <button
-        class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors disabled:opacity-50"
-        [disabled]="!messageState.hasSelection()"
-        (click)="markRead()"
-        title="Als gelesen markieren"
-      >
-        <app-icon name="mail-open" [size]="16" />
-        <span class="hidden sm:inline">Gelesen</span>
-      </button>
-
       <div class="flex-1"></div>
 
-      <button
-        class="rounded-md p-1.5 hover:bg-accent transition-colors"
-        (click)="uiState.toggleSidebar()"
-        title="Sidebar ein-/ausblenden"
-      >
-        <app-icon name="menu" [size]="18" />
-      </button>
+      @if (messageState.hasSelection()) {
+        <button
+          class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors"
+          (click)="reply()"
+          title="Antworten"
+        >
+          <app-icon name="reply" [size]="16" />
+          <span class="hidden sm:inline">Antworten</span>
+        </button>
+
+        <button
+          class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors"
+          (click)="forward()"
+          title="Weiterleiten"
+        >
+          <app-icon name="forward" [size]="16" />
+          <span class="hidden sm:inline">Weiterleiten</span>
+        </button>
+
+        <button
+          class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors text-destructive"
+          (click)="deleteSelected()"
+          title="Löschen"
+        >
+          <app-icon name="trash" [size]="16" />
+          <span class="hidden sm:inline">Löschen</span>
+        </button>
+
+        <button
+          class="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm hover:bg-accent transition-colors"
+          (click)="markRead()"
+          title="Als gelesen markieren"
+        >
+          <app-icon name="mail-open" [size]="16" />
+          <span class="hidden sm:inline">Gelesen</span>
+        </button>
+      }
     </div>
   `,
 })

@@ -9,7 +9,6 @@ import {
   HttpCode,
   HttpStatus,
   Res,
-  Header,
 } from '@nestjs/common';
 import { Response } from 'express';
 import { MessageService } from './message.service';
@@ -29,12 +28,16 @@ export class MessageController {
     @Param('mailbox') mailbox: string,
     @Query('page') page: string = '1',
     @Query('pageSize') pageSize: string = '20',
+    @Query('threaded') threaded?: string,
+    @Query('fresh') fresh?: string,
   ) {
     return this.messageService.list(
       accountId,
       decodeURIComponent(mailbox),
       parseInt(page, 10) || 1,
       parseInt(pageSize, 10) || 20,
+      threaded === 'true',
+      fresh === 'true',
     );
   }
 

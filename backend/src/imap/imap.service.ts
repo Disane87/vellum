@@ -95,17 +95,27 @@ export class ImapService {
     mailboxPath: string,
     page: number,
     pageSize: number,
+    fresh = false,
   ): Promise<MessageListResponse> {
-    // Cache-first
-    const cached = this.cacheDb.getMessageList(accountId, mailboxPath, page, pageSize);
-    if (cached) {
-      this.logger.debug(`Messages served from cache: ${mailboxPath} page ${page}`);
-      // Background sync for fresh data
-      this.syncMessages(accountId, mailboxPath).catch(() => {});
-      return { ...cached, page, pageSize, mailbox: mailboxPath };
+    if (!fresh && page === 1) {
+      // Page 1: always check IMAP for real total + new messages
+      // Return cached messages immediately but sync in foreground first
+      const cached = this.cacheDb.getMessageList(accountId, mailboxPath, page, pageSize);
+      if (cached && cached.messages.length >= pageSize) {
+        // Sync new messages in background, return cached for speed
+        this.syncMessages(accountId, mailboxPath).catch(() => {});
+        return { ...cached, page, pageSize, mailbox: mailboxPath };
+      }
+    } else if (!fresh && page > 1) {
+      // Subsequent pages: serve from cache if available
+      const cached = this.cacheDb.getMessageList(accountId, mailboxPath, page, pageSize);
+      if (cached && cached.messages.length > 0) {
+        return { ...cached, page, pageSize, mailbox: mailboxPath };
+      }
     }
 
-    // No cache — fetch from IMAP and cache
+    // Fetch from IMAP
+    this.logger.log(`Fetching page ${page} from IMAP for ${mailboxPath} (fresh=${fresh})`);
     return this.fetchAndCacheMessages(accountId, mailboxPath, page, pageSize);
   }
 
@@ -147,8 +157,9 @@ export class ImapService {
 
       await client.mailboxClose();
 
-      // Cache the fetched messages + collect contacts
+      // Cache the fetched messages + store real mailbox total + collect contacts
       this.cacheDb.upsertMessages(accountId, mailboxPath, messages);
+      this.cacheDb.setMailboxTotal(accountId, mailboxPath, total);
       this.cacheDb.setLastSync(accountId, mailboxPath);
       this.collectContacts(accountId, messages);
 
@@ -185,6 +196,9 @@ export class ImapService {
         const mailbox = await client.mailboxOpen(mailboxPath);
         const total = mailbox.exists ?? 0;
 
+        // Always update the real total
+        this.cacheDb.setMailboxTotal(accountId, mailboxPath, total);
+
         if (total === 0) {
           await client.mailboxClose();
           return;
@@ -202,7 +216,7 @@ export class ImapService {
               flags: true,
               size: true,
               bodyStructure: true,
-            });
+            }, { uid: true }); // IMPORTANT: search by UID, not sequence number
 
             for await (const msg of fetchIterator) {
               if ((msg as any).uid > highestUid) {
@@ -216,6 +230,7 @@ export class ImapService {
           if (newMessages.length > 0) {
             this.logger.log(`Synced ${newMessages.length} new messages in ${mailboxPath}`);
             this.cacheDb.upsertMessages(accountId, mailboxPath, newMessages);
+            this.collectContacts(accountId, newMessages);
           }
         }
 

@@ -16,7 +16,7 @@
     "build:electron": "tsc -p electron/tsconfig.json",
     "build": "npm run build:shared && npm run build:backend && npm run build:frontend && npm run build:electron",
     "dev": "concurrently -n be,fe -c blue,green \"npm run dev:backend\" \"npm run dev:frontend\"",
-    "dev:electron": "concurrently -n be,fe,el -c blue,green,yellow \"npm run dev:backend\" \"npm run dev:frontend\" \"npm run build:electron && electron .\"",
+    "dev:electron": "concurrently -n be,fe,el-watch,el -c blue,green,cyan,yellow \"npm run dev:backend\" \"npm run dev:frontend\" \"tsc -p electron/tsconfig.json -w\" \"wait-on tcp:4200 && electronmon .\"",
     "dev:backend": "npm run dev -w backend",
     "dev:frontend": "npm run dev -w frontend",
     "test:backend": "npm test -w backend",
@@ -51,15 +51,22 @@
       }
     ],
     "win": {
-      "target": ["nsis"],
-      "icon": "frontend/public/favicon.ico"
+      "target": [
+        "nsis"
+      ],
+      "icon": "electron/icon.png"
     },
     "mac": {
-      "target": ["dmg"],
+      "target": [
+        "dmg"
+      ],
       "category": "public.app-category.productivity"
     },
     "linux": {
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Office"
     },
     "nsis": {
@@ -68,11 +75,13 @@
     }
   },
   "devDependencies": {
+    "@semantic-release/changelog": "^6.0.3",
+    "@semantic-release/git": "^10.0.1",
     "concurrently": "^9.2.1",
     "electron": "^35.0.0",
     "electron-builder": "^26.0.0",
-    "@semantic-release/changelog": "^6.0.3",
-    "@semantic-release/git": "^10.0.1",
-    "semantic-release": "^24.0.0"
+    "electronmon": "^2.0.4",
+    "semantic-release": "^24.0.0",
+    "wait-on": "^9.0.4"
   }
 }

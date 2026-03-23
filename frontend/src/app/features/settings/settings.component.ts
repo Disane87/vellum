@@ -1,6 +1,7 @@
 import { Component, inject } from '@angular/core';
 import { Router } from '@angular/router';
 import { AccountState } from '../../core/state/account.state';
+import { UiState } from '../../core/state/ui.state';
 import { AccountService } from '../../core/services/account.service';
 import { NotificationService } from '../../core/services/notification.service';
 import { IconComponent } from '../../shared/components/icon.component';
@@ -72,11 +73,35 @@ import { IconComponent } from '../../shared/components/icon.component';
           </button>
         </div>
       </div>
+      <!-- Debug -->
+      <div class="rounded-lg border border-border bg-card mt-6">
+        <div class="border-b border-border px-4 py-3">
+          <h2 class="text-sm font-medium">Entwickler</h2>
+        </div>
+        <div class="px-4 py-3 flex items-center justify-between">
+          <div>
+            <div class="text-sm">Debug-Modus</div>
+            <div class="text-xs text-muted-foreground">Öffnet DevTools und zeigt zusätzliche Informationen</div>
+          </div>
+          <button
+            class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors"
+            [class]="uiState.debugMode() ? 'bg-primary' : 'bg-muted'"
+            (click)="uiState.toggleDebugMode()"
+          >
+            <span
+              class="inline-block h-4 w-4 transform rounded-full bg-white transition-transform"
+              [class.translate-x-6]="uiState.debugMode()"
+              [class.translate-x-1]="!uiState.debugMode()"
+            ></span>
+          </button>
+        </div>
+      </div>
     </div>
   `,
 })
 export class SettingsComponent {
   protected readonly accountState = inject(AccountState);
+  protected readonly uiState = inject(UiState);
   private readonly accountService = inject(AccountService);
   private readonly notifications = inject(NotificationService);
   private readonly router = inject(Router);

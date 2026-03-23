@@ -8,6 +8,7 @@ import { ComposerComponent } from '../composer/composer.component';
 import { SearchBarComponent } from '../search/search-bar.component';
 import { ToastContainerComponent } from '../../shared/components/toast.component';
 import { IconComponent } from '../../shared/components/icon.component';
+import { TitlebarComponent } from './titlebar/titlebar.component';
 import { AccountService } from '../../core/services/account.service';
 import { MailboxService } from '../../core/services/mailbox.service';
 import { WebSocketService } from '../../core/services/websocket.service';
@@ -30,9 +31,11 @@ import { MessageState } from '../../core/state/message.state';
     SearchBarComponent,
     ToastContainerComponent,
     IconComponent,
+    TitlebarComponent,
   ],
   template: `
     <div class="flex h-screen flex-col bg-background text-foreground">
+      <app-titlebar />
       <app-toolbar />
 
       <div class="flex flex-1 overflow-hidden">

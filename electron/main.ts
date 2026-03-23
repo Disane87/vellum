@@ -1,4 +1,4 @@
-import { app, BrowserWindow, shell } from 'electron';
+import { app, BrowserWindow, shell, ipcMain } from 'electron';
 import { spawn, ChildProcess } from 'child_process';
 import * as path from 'path';
 import * as net from 'net';
@@ -8,6 +8,7 @@ let backendProcess: ChildProcess | null = null;
 
 const BACKEND_PORT = 3000;
 const isDev = !app.isPackaged;
+const isMac = process.platform === 'darwin';
 
 function findOpenPort(startPort: number): Promise<number> {
   return new Promise((resolve) => {
@@ -49,10 +50,16 @@ function createWindow(): void {
     minWidth: 800,
     minHeight: 600,
     title: 'Vellum',
-    titleBarStyle: 'hiddenInset',
+    icon: path.join(__dirname, '..', 'icon.png'),
+    frame: false,
+    titleBarStyle: isMac ? 'hiddenInset' : 'default',
+    trafficLightPosition: isMac ? { x: 12, y: 12 } : undefined,
     webPreferences: {
       nodeIntegration: false,
       contextIsolation: true,
+      preload: isDev
+        ? path.join(__dirname, 'preload.js')
+        : path.join(__dirname, 'preload.js'),
     },
   });
 
@@ -72,9 +79,26 @@ function createWindow(): void {
   });
 }
 
+// Window control IPC handlers
+ipcMain.on('window:minimize', () => mainWindow?.minimize());
+ipcMain.on('window:maximize', () => {
+  if (mainWindow?.isMaximized()) {
+    mainWindow.unmaximize();
+  } else {
+    mainWindow?.maximize();
+  }
+});
+ipcMain.on('window:close', () => mainWindow?.close());
+ipcMain.on('window:devtools', () => mainWindow?.webContents.toggleDevTools());
+ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized() ?? false);
+
 app.on('ready', async () => {
   await startBackend();
   createWindow();
+
+  // Notify renderer about maximize state changes
+  mainWindow?.on('maximize', () => mainWindow?.webContents.send('window:maximized-changed', true));
+  mainWindow?.on('unmaximize', () => mainWindow?.webContents.send('window:maximized-changed', false));
 });
 
 app.on('window-all-closed', () => {

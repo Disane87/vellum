@@ -10,6 +10,7 @@ import type {
   MessageListResponse,
   MessageFull,
   MessageFlag,
+  ThreadedMessageListResponse,
 } from '@vellum/shared';
 
 @Injectable({ providedIn: 'root' })
@@ -26,6 +27,7 @@ export class MessageService {
     if (!accountId) return;
 
     const page = this.messageState.page();
+    const threaded = this.messageState.threaded();
     const cacheKey = CacheKeys.messageList(accountId, mailbox, page);
 
     if (!forceRefresh) {
@@ -34,20 +36,58 @@ export class MessageService {
         this.messageState.setMessages(cached.messages, cached.total);
         return;
       }
+    } else {
+      // On force refresh, invalidate all page caches for this mailbox
+      this.cache.invalidateByPrefix(CacheKeys.messageListPrefix(accountId, mailbox));
     }
 
     this.messageState.loading.set(true);
     try {
       const pageSize = this.messageState.pageSize();
-      const result = await firstValueFrom(
-        this.api.get<MessageListResponse>(
-          `/accounts/${accountId}/mailboxes/${encodeURIComponent(mailbox)}/messages?page=${page}&pageSize=${pageSize}`,
-        ),
-      );
-      this.cache.set(cacheKey, result, CacheTTL.messageList);
-      this.messageState.setMessages(result.messages, result.total);
+      let url = `/accounts/${accountId}/mailboxes/${encodeURIComponent(mailbox)}/messages?page=${page}&pageSize=${pageSize}`;
+      if (threaded) url += '&threaded=true';
+      if (forceRefresh) url += '&fresh=true';
+
+      if (threaded) {
+        const result = await firstValueFrom(
+          this.api.get<ThreadedMessageListResponse>(url),
+        );
+        this.messageState.threads.set(result.threads);
+        // Flatten threads into messages for the main list
+        const allMessages = result.threads.flatMap((t) => t.messages);
+        this.messageState.setMessages(allMessages, result.total);
+      } else {
+        const result = await firstValueFrom(
+          this.api.get<MessageListResponse>(url),
+        );
+        this.cache.set(cacheKey, result, CacheTTL.messageList);
+        this.messageState.setMessages(result.messages, result.total);
+      }
     } finally {
       this.messageState.loading.set(false);
+    }
+  }
+
+  /** Load next page and append (for infinite scroll) */
+  async loadMoreMessages(): Promise<void> {
+    const accountId = this.accountState.activeAccountId();
+    const mailbox = this.mailboxState.activeMailboxPath();
+    if (!accountId || !this.messageState.hasMore() || this.messageState.loadingMore()) return;
+
+    const nextPage = this.messageState.page() + 1;
+    this.messageState.setPage(nextPage);
+    this.messageState.loadingMore.set(true);
+
+    try {
+      const pageSize = this.messageState.pageSize();
+      const result = await firstValueFrom(
+        this.api.get<MessageListResponse>(
+          `/accounts/${accountId}/mailboxes/${encodeURIComponent(mailbox)}/messages?page=${nextPage}&pageSize=${pageSize}`,
+        ),
+      );
+      this.messageState.appendMessages(result.messages, result.total);
+    } finally {
+      this.messageState.loadingMore.set(false);
     }
   }
 
@@ -85,7 +125,6 @@ export class MessageService {
       );
       this.cache.invalidate(CacheKeys.messageFull(accountId, mailbox, uid));
     }
-    // Invalidate list caches for this mailbox (all pages)
     this.cache.invalidateByPrefix(CacheKeys.messageListPrefix(accountId, mailbox));
     this.messageState.removeMessages(uids);
   }
@@ -102,7 +141,6 @@ export class MessageService {
       ),
     );
 
-    // Invalidate source and destination mailbox caches
     for (const uid of uids) {
       this.cache.invalidate(CacheKeys.messageFull(accountId, mailbox, uid));
     }
@@ -127,7 +165,6 @@ export class MessageService {
       ),
     );
 
-    // Invalidate affected message caches
     for (const uid of uids) {
       this.cache.invalidate(CacheKeys.messageFull(accountId, mailbox, uid));
     }

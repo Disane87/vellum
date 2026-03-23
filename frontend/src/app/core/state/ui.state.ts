@@ -10,6 +10,7 @@ export class UiState {
   readonly composerMode = signal<ComposerMode>('new');
   readonly searchQuery = signal<SearchQuery | null>(null);
   readonly theme = signal<'light' | 'dark'>('dark');
+  readonly debugMode = signal(false);
 
   toggleSidebar(): void {
     this.sidebarCollapsed.update((v) => !v);
@@ -30,5 +31,13 @@ export class UiState {
 
   toggleTheme(): void {
     this.theme.update((t) => (t === 'dark' ? 'light' : 'dark'));
+  }
+
+  toggleDebugMode(): void {
+    const next = !this.debugMode();
+    this.debugMode.set(next);
+    if (next) {
+      (window as any).electronAPI?.openDevTools();
+    }
   }
 }

@@ -87,11 +87,10 @@ export class CacheDbService implements OnModuleInit, OnModuleDestroy {
     page: number,
     pageSize: number,
   ): { messages: MessageEnvelope[]; total: number } | null {
-    const countRow = this.db
-      .prepare('SELECT COUNT(*) as cnt FROM messages WHERE account_id = ? AND mailbox = ?')
-      .get(accountId, mailbox) as { cnt: number };
-
-    if (countRow.cnt === 0) return null;
+    // Use the real total from sync_state, not the cached message count
+    const totalRow = this.db
+      .prepare('SELECT total FROM mailbox_totals WHERE account_id = ? AND mailbox = ?')
+      .get(accountId, mailbox) as { total: number } | undefined;
 
     const offset = (page - 1) * pageSize;
     const rows = this.db
@@ -100,10 +99,20 @@ export class CacheDbService implements OnModuleInit, OnModuleDestroy {
       )
       .all(accountId, mailbox, pageSize, offset) as { envelope: string }[];
 
+    if (rows.length === 0) return null;
+
     return {
       messages: rows.map((r) => JSON.parse(r.envelope)),
-      total: countRow.cnt,
+      total: totalRow?.total ?? rows.length,
     };
+  }
+
+  setMailboxTotal(accountId: string, mailbox: string, total: number): void {
+    this.db
+      .prepare(
+        'INSERT OR REPLACE INTO mailbox_totals (account_id, mailbox, total) VALUES (?, ?, ?)',
+      )
+      .run(accountId, mailbox, total);
   }
 
   upsertMessages(accountId: string, mailbox: string, messages: MessageEnvelope[]): void {
@@ -262,6 +271,57 @@ export class CacheDbService implements OnModuleInit, OnModuleDestroy {
     return !!row;
   }
 
+  // --- Tags ---
+
+  getTags(accountId: string): { id: string; name: string; color: string }[] {
+    return this.db
+      .prepare('SELECT id, name, color FROM tags WHERE account_id = ?')
+      .all(accountId) as { id: string; name: string; color: string }[];
+  }
+
+  createTag(accountId: string, id: string, name: string, color: string): void {
+    this.db
+      .prepare('INSERT INTO tags (id, account_id, name, color) VALUES (?, ?, ?, ?)')
+      .run(id, accountId, name, color);
+  }
+
+  updateTag(id: string, name: string, color: string): void {
+    this.db.prepare('UPDATE tags SET name = ?, color = ? WHERE id = ?').run(name, color, id);
+  }
+
+  deleteTag(id: string): void {
+    this.db.prepare('DELETE FROM tags WHERE id = ?').run(id);
+  }
+
+  getMessageTags(accountId: string, mailbox: string, uids: number[]): Record<number, string[]> {
+    if (uids.length === 0) return {};
+    const placeholders = uids.map(() => '?').join(',');
+    const rows = this.db
+      .prepare(
+        `SELECT uid, tag_id FROM message_tags WHERE account_id = ? AND mailbox = ? AND uid IN (${placeholders})`,
+      )
+      .all(accountId, mailbox, ...uids) as { uid: number; tag_id: string }[];
+
+    const result: Record<number, string[]> = {};
+    for (const row of rows) {
+      if (!result[row.uid]) result[row.uid] = [];
+      result[row.uid].push(row.tag_id);
+    }
+    return result;
+  }
+
+  addMessageTag(accountId: string, mailbox: string, uid: number, tagId: string): void {
+    this.db
+      .prepare('INSERT OR IGNORE INTO message_tags (account_id, mailbox, uid, tag_id) VALUES (?, ?, ?, ?)')
+      .run(accountId, mailbox, uid, tagId);
+  }
+
+  removeMessageTag(accountId: string, mailbox: string, uid: number, tagId: string): void {
+    this.db
+      .prepare('DELETE FROM message_tags WHERE account_id = ? AND mailbox = ? AND uid = ? AND tag_id = ?')
+      .run(accountId, mailbox, uid, tagId);
+  }
+
   // --- Schema ---
 
   private migrate(): void {
@@ -318,6 +378,32 @@ export class CacheDbService implements OnModuleInit, OnModuleDestroy {
         name TEXT,
         last_seen TEXT NOT NULL,
         PRIMARY KEY (account_id, address)
+      )
+    `);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS tags (
+        id TEXT NOT NULL PRIMARY KEY,
+        account_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        color TEXT NOT NULL DEFAULT '#6366f1'
+      )
+    `);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS message_tags (
+        account_id TEXT NOT NULL,
+        mailbox TEXT NOT NULL,
+        uid INTEGER NOT NULL,
+        tag_id TEXT NOT NULL,
+        PRIMARY KEY (account_id, mailbox, uid, tag_id),
+        FOREIGN KEY (tag_id) REFERENCES tags(id) ON DELETE CASCADE
+      )
+    `);
+    this.db.exec(`
+      CREATE TABLE IF NOT EXISTS mailbox_totals (
+        account_id TEXT NOT NULL,
+        mailbox TEXT NOT NULL,
+        total INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (account_id, mailbox)
       )
     `);
     this.db.exec(`

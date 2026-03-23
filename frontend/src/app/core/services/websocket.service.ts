@@ -1,4 +1,4 @@
-import { Injectable, inject, OnDestroy } from '@angular/core';
+import { Injectable, inject, OnDestroy, effect } from '@angular/core';
 import { MessageState } from '../state/message.state';
 import { MailboxState } from '../state/mailbox.state';
 import { AccountState } from '../state/account.state';
@@ -11,11 +11,23 @@ export class WebSocketService implements OnDestroy {
   private ws: WebSocket | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private reconnectDelay = 1000;
+  private currentSubscription: { accountId: string; mailbox: string } | null = null;
 
   private readonly messageState = inject(MessageState);
   private readonly mailboxState = inject(MailboxState);
   private readonly accountState = inject(AccountState);
   private readonly cache = inject(CacheService);
+
+  constructor() {
+    // Auto-subscribe when active mailbox changes
+    effect(() => {
+      const accountId = this.accountState.activeAccountId();
+      const mailbox = this.mailboxState.activeMailboxPath();
+      if (accountId && mailbox && this.ws?.readyState === WebSocket.OPEN) {
+        this.syncSubscription(accountId, mailbox);
+      }
+    });
+  }
 
   connect(): void {
     const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
@@ -24,10 +36,33 @@ export class WebSocketService implements OnDestroy {
     this.ws = new WebSocket(url);
     this.ws.onopen = () => {
       this.reconnectDelay = 1000;
+      // Re-subscribe to active mailbox on reconnect
+      const accountId = this.accountState.activeAccountId();
+      const mailbox = this.mailboxState.activeMailboxPath();
+      if (accountId && mailbox) {
+        this.syncSubscription(accountId, mailbox);
+      }
     };
     this.ws.onmessage = (event) => this.handleMessage(event);
     this.ws.onclose = () => this.scheduleReconnect();
     this.ws.onerror = () => this.ws?.close();
+  }
+
+  private syncSubscription(accountId: string, mailbox: string): void {
+    // Unsubscribe from previous mailbox
+    if (this.currentSubscription) {
+      if (this.currentSubscription.accountId === accountId && this.currentSubscription.mailbox === mailbox) {
+        return; // Already subscribed
+      }
+      this.send({
+        type: 'unsubscribe_mailbox',
+        payload: { accountId: this.currentSubscription.accountId, mailbox: this.currentSubscription.mailbox },
+      });
+    }
+
+    // Subscribe to new mailbox
+    this.send({ type: 'subscribe_mailbox', payload: { accountId, mailbox } });
+    this.currentSubscription = { accountId, mailbox };
   }
 
   subscribeMailbox(accountId: string, mailbox: string): void {

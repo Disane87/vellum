@@ -12,6 +12,8 @@ import {
   Clock, Flag, Tag, Hash, AtSign, Globe, ExternalLink, Copy,
   ChevronDown, ChevronUp, MoreHorizontal, Filter, SortAsc, SortDesc,
   Bell, BellOff, Maximize2, Minimize2, RotateCw,
+  MessagesSquare, Calendar, Type, HardDrive, ArrowUpDown, ArrowUp, ArrowDown,
+  Loader2 as Loader2Icon, Square,
   type IconNode,
 } from 'lucide';
 
@@ -92,6 +94,15 @@ const ICON_MAP: Record<string, IconNode> = {
   maximize: Maximize2,
   minimize: Minimize2,
   'rotate-cw': RotateCw,
+  'messages-square': MessagesSquare,
+  calendar: Calendar,
+  text: Type,
+  'hard-drive': HardDrive,
+  'arrow-up-down': ArrowUpDown,
+  'arrow-up': ArrowUp,
+  'arrow-down': ArrowDown,
+  'loader-2': Loader2Icon,
+  square: Square,
 };
 
 function renderIcon(node: IconNode): string {

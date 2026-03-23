@@ -1,13 +1,20 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { ImapService } from '../imap/imap.service';
 import { SanitizerService } from './sanitizer.service';
-import type { MessageListResponse, MessageFull, MessageFlag } from '@vellum/shared';
+import { ThreadingService } from './threading.service';
+import type {
+  MessageListResponse,
+  MessageFull,
+  MessageFlag,
+  ThreadedMessageListResponse,
+} from '@vellum/shared';
 
 @Injectable()
 export class MessageService {
   constructor(
     private readonly imapService: ImapService,
     private readonly sanitizerService: SanitizerService,
+    private readonly threadingService: ThreadingService,
   ) {}
 
   async list(
@@ -15,8 +22,23 @@ export class MessageService {
     mailbox: string,
     page: number,
     pageSize: number,
-  ): Promise<MessageListResponse> {
-    return this.imapService.listMessages(accountId, mailbox, page, pageSize);
+    threaded = false,
+    fresh = false,
+  ): Promise<MessageListResponse | ThreadedMessageListResponse> {
+    const result = await this.imapService.listMessages(accountId, mailbox, page, pageSize, fresh);
+
+    if (threaded) {
+      const threads = this.threadingService.buildThreads(result.messages);
+      return {
+        threads,
+        total: result.total,
+        page: result.page,
+        pageSize: result.pageSize,
+        mailbox: result.mailbox,
+      } as ThreadedMessageListResponse;
+    }
+
+    return result;
   }
 
   async getOne(
@@ -29,7 +51,6 @@ export class MessageService {
       throw new NotFoundException(`Message ${uid} not found in ${mailbox}`);
     }
 
-    // Sanitize HTML body
     if (message.bodyHtml) {
       message.bodyHtml = this.sanitizerService.sanitize(message.bodyHtml);
     }
