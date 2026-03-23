@@ -1,3 +1,9 @@
+## [1.2.0](https://github.com/Disane87/vellum/compare/v1.1.0...v1.2.0) (2026-03-23)
+
+### ✨ Features
+
+* restructure .releaserc.json for improved plugin configuration and organization ([4739102](https://github.com/Disane87/vellum/commit/4739102a7a178465b6bbd4c6a84e25e9817064ac))
+
 # [1.1.0](https://github.com/Disane87/vellum/compare/v1.0.0...v1.1.0) (2026-03-23)
 
 
