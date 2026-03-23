@@ -74,11 +74,9 @@ jobs:
           if-no-files-found: ignore
 
       - name: Upload to GitHub Release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.release.outputs.new_release_version }}
-          files: |
-            release/*.exe
-            release/*.dmg
-            release/*.AppImage
-            release/*.deb
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for f in release/*.exe release/*.dmg release/*.AppImage release/*.deb; do
+            [ -f "$f" ] && gh release upload "v${{ needs.release.outputs.new_release_version }}" "$f" --clobber || true
+          done
