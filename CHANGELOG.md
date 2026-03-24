@@ -1,3 +1,9 @@
+## [1.3.0](https://github.com/Disane87/vellum/compare/v1.2.1...v1.3.0) (2026-03-24)
+
+### ✨ Features
+
+* improve Electron integration with tray, notifications, settings persistence and attachment downloads ([57070c8](https://github.com/Disane87/vellum/commit/57070c8576c088aa1131079d1392756f20bd0230))
+
 ## [1.2.1](https://github.com/Disane87/vellum/compare/v1.2.0...v1.2.1) (2026-03-23)
 
 ### 🐛 Bug Fixes
