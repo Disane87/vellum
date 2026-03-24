@@ -131,5 +131,13 @@ export class ShellComponent implements OnInit {
     }
     this.mailboxService.loadMailboxes();
     this.wsService.connect();
+
+    // Listen for compose-new from system tray
+    window.addEventListener('vellum:compose-new', () => {
+      this.uiState.openComposer('new');
+    });
+    (window as any).electronAPI?.onComposeNew?.(() => {
+      this.uiState.openComposer('new');
+    });
   }
 }

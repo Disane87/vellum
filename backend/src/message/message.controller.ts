@@ -122,7 +122,7 @@ export class MessageController {
     @Param('partId') partId: string,
     @Res() res: Response,
   ) {
-    const { stream, contentType, filename } = await this.attachmentService.download(
+    const { buffer, contentType, filename } = await this.attachmentService.download(
       accountId,
       decodeURIComponent(mailbox),
       parseInt(uid, 10),
@@ -131,9 +131,10 @@ export class MessageController {
 
     res.set({
       'Content-Type': contentType,
-      'Content-Disposition': `attachment; filename="${filename}"`,
+      'Content-Disposition': `attachment; filename="${encodeURIComponent(filename)}"`,
+      'Content-Length': String(buffer.length),
     });
 
-    stream.pipe(res);
+    res.end(buffer);
   }
 }

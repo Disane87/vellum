@@ -27,11 +27,21 @@ export class WebSocketService implements OnDestroy {
         this.syncSubscription(accountId, mailbox);
       }
     });
+
+    // Track total unread count across all mailboxes and push to Electron
+    effect(() => {
+      const mailboxes = this.mailboxState.mailboxes();
+      const totalUnread = mailboxes.reduce((sum, m) => sum + (m.unseenMessages ?? 0), 0);
+      (window as any).electronAPI?.setUnreadCount?.(totalUnread);
+    });
+
   }
 
   connect(): void {
-    const protocol = location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const url = `${protocol}//${location.host}/api/v1/ws`;
+    const port = (window as any).electronAPI?.backendPort;
+    const url = port
+      ? `ws://localhost:${port}/api/v1/ws`
+      : `${location.protocol === 'https:' ? 'wss:' : 'ws:'}//${location.host}/api/v1/ws`;
 
     this.ws = new WebSocket(url);
     this.ws.onopen = () => {
@@ -94,6 +104,9 @@ export class WebSocketService implements OnDestroy {
         }
         // Invalidate mailbox tree cache (unread counts changed)
         this.cache.invalidate(CacheKeys.mailboxes(accountId));
+
+        // Send desktop notification
+        this.sendDesktopNotification(envelope, accountId, data.mailbox);
         break;
       }
       case 'mailbox_updated': {
@@ -131,6 +144,19 @@ export class WebSocketService implements OnDestroy {
         break;
       }
     }
+  }
+
+  private sendDesktopNotification(envelope: MessageEnvelope, accountId: string, mailbox?: string): void {
+    const from = envelope.from?.[0];
+    if (!from) return;
+
+    const senderName = from.name || from.address;
+    (window as any).electronAPI?.notify?.({
+      title: senderName,
+      body: envelope.subject || '(Kein Betreff)',
+      accountId,
+      mailbox,
+    });
   }
 
   private send(data: unknown): void {

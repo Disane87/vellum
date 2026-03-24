@@ -5,17 +5,19 @@ import * as fs from 'fs';
 import * as path from 'path';
 import type { Account, AccountCreateDto, AccountUpdateDto } from '@vellum/shared';
 
-// Find the backend workspace root by looking for nest-cli.json
-function findBackendRoot(): string {
+function resolveDataDir(): string {
+  // Prefer DATA_DIR env var (set by Electron for persistent storage in %APPDATA%)
+  if (process.env['DATA_DIR']) return process.env['DATA_DIR'];
+  // Fallback: look for backend workspace root (dev mode)
   let dir = __dirname;
   for (let i = 0; i < 5; i++) {
-    if (fs.existsSync(path.join(dir, 'nest-cli.json'))) return dir;
+    if (fs.existsSync(path.join(dir, 'nest-cli.json'))) return path.join(dir, 'data');
     dir = path.dirname(dir);
   }
-  return process.cwd();
+  return path.join(process.cwd(), 'data');
 }
 
-const DATA_DIR = path.join(findBackendRoot(), 'data');
+const DATA_DIR = resolveDataDir();
 const ACCOUNTS_FILE = path.join(DATA_DIR, 'accounts.json');
 
 @Injectable()

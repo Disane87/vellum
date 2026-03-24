@@ -15,7 +15,7 @@
   ],
   "scripts": {
     "build:shared": "npm run build -w packages/shared",
-    "build:backend": "npm run build -w backend",
+    "build:backend": "npm run build -w backend && npx esbuild backend/dist/main.js --bundle --platform=node --target=node22 --outfile=backend/dist/bundle.js --external:better-sqlite3 --external:@nestjs/microservices --external:@nestjs/platform-socket.io --external:class-transformer/storage",
     "build:frontend": "npm run build -w frontend",
     "build:electron": "tsc -p electron/tsconfig.json",
     "build": "npm run build:shared && npm run build:backend && npm run build:frontend && npm run build:electron",
@@ -26,14 +26,15 @@
     "test:backend": "npm test -w backend",
     "test:frontend": "npm test -w frontend",
     "test": "npm run test:backend && npm run test:frontend",
-    "dist": "npm run build && electron-builder --publish never",
-    "dist:win": "npm run build && electron-builder --win --publish never",
-    "dist:mac": "npm run build && electron-builder --mac --publish never",
-    "dist:linux": "npm run build && electron-builder --linux --publish never"
+    "dist": "npm run build && npx electron-rebuild -m . -o better-sqlite3 && electron-builder --publish never",
+    "dist:win": "npm run build && npx electron-rebuild -m . -o better-sqlite3 && electron-builder --win --publish never",
+    "dist:mac": "npm run build && npx electron-rebuild -m . -o better-sqlite3 && electron-builder --mac --publish never",
+    "dist:linux": "npm run build && npx electron-rebuild -m . -o better-sqlite3 && electron-builder --linux --publish never"
   },
   "build": {
     "appId": "com.vellum.app",
     "productName": "Vellum",
+    "npmRebuild": false,
     "directories": {
       "output": "release"
     },
@@ -44,27 +45,16 @@
     ],
     "extraResources": [
       {
-        "from": "backend/dist",
-        "to": "backend/dist"
+        "from": "backend/dist/bundle.js",
+        "to": "backend/dist/bundle.js"
       },
       {
         "from": "node_modules",
         "to": "node_modules",
         "filter": [
-          "imapflow/**",
-          "nodemailer/**",
           "better-sqlite3/**",
-          "sanitize-html/**",
-          "mailparser/**",
-          "generic-pool/**",
-          "@nestjs/**",
-          "reflect-metadata/**",
-          "rxjs/**",
-          "class-transformer/**",
-          "class-validator/**",
-          "uuid/**",
-          "iterare/**",
-          "tslib/**"
+          "bindings/**",
+          "file-uri-to-path/**"
         ]
       },
       {
@@ -101,7 +91,7 @@
     "@semantic-release/git": "^10.0.1",
     "concurrently": "^9.2.1",
     "conventional-changelog-conventionalcommits": "^9.3.0",
-    "electron": "^35.0.0",
+    "electron": "^40.0.0",
     "electron-builder": "^26.0.0",
     "electronmon": "^2.0.4",
     "semantic-release": "^24.0.0",

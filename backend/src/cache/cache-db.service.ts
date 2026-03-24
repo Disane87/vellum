@@ -4,16 +4,19 @@ import * as path from 'path';
 import * as fs from 'fs';
 import type { Mailbox, MessageEnvelope, MessageFull } from '@vellum/shared';
 
-function findBackendRoot(): string {
+function resolveDataDir(): string {
+  // Prefer DATA_DIR env var (set by Electron for persistent storage in %APPDATA%)
+  if (process.env['DATA_DIR']) return process.env['DATA_DIR'];
+  // Fallback: look for backend workspace root (dev mode)
   let dir = __dirname;
   for (let i = 0; i < 5; i++) {
-    if (fs.existsSync(path.join(dir, 'nest-cli.json'))) return dir;
+    if (fs.existsSync(path.join(dir, 'nest-cli.json'))) return path.join(dir, 'data');
     dir = path.dirname(dir);
   }
-  return process.cwd();
+  return path.join(process.cwd(), 'data');
 }
 
-const DB_PATH = path.join(findBackendRoot(), 'data', 'mail-cache.db');
+const DB_PATH = path.join(resolveDataDir(), 'mail-cache.db');
 
 @Injectable()
 export class CacheDbService implements OnModuleInit, OnModuleDestroy {

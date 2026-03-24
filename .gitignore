@@ -13,3 +13,6 @@ Thumbs.db
 # Electron
 release/
 electron/dist/
+
+# Build artifacts
+release2/

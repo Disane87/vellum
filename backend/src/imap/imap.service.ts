@@ -442,6 +442,31 @@ export class ImapService {
     });
   }
 
+  async getMessageSource(
+    accountId: string,
+    mailboxPath: string,
+    uid: number,
+  ): Promise<Buffer | null> {
+    return this.withClient(accountId, async (client) => {
+      await client.mailboxOpen(mailboxPath);
+      const fetchIterator = client.fetch(
+        String(uid),
+        { source: true },
+        { uid: true },
+      );
+
+      for await (const msg of fetchIterator) {
+        if (msg.source) {
+          await client.mailboxClose();
+          return msg.source as Buffer;
+        }
+      }
+
+      await client.mailboxClose();
+      return null;
+    });
+  }
+
   async search(
     accountId: string,
     mailboxPath: string,

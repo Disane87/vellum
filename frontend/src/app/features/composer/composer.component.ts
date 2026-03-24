@@ -278,11 +278,34 @@ export class ComposerComponent {
     this.attachments.update((list) => list.filter((f) => f.name !== name));
   }
 
+  private async getAccountSignature(): Promise<string> {
+    const accountId = this.accountState.activeAccountId();
+    if (!accountId) return '';
+    try {
+      const settings = await (window as any).electronAPI?.getSettings();
+      const sigs = settings?.signatures as { accountId: string; html: string }[] | undefined;
+      const sig = sigs?.find((s: any) => s.accountId === accountId);
+      return sig?.html || '';
+    } catch {
+      return '';
+    }
+  }
+
   private prefill(): void {
     this.reset();
     const mode = this.uiState.composerMode();
     const msg = this.messageState.selectedMessage();
-    if (!msg || mode === 'new') return;
+
+    // Append signature for new messages
+    if (mode === 'new') {
+      this.getAccountSignature().then((sig) => {
+        if (sig) {
+          this.initialBodyHtml = `<br/><br/><div class="signature">${sig}</div>`;
+        }
+      });
+      return;
+    }
+    if (!msg) return;
 
     const account = this.accountState.activeAccount();
     const myEmail = account?.email || '';
@@ -314,8 +337,12 @@ export class ComposerComponent {
         msg.messageId,
       ].filter(Boolean);
 
-      // Build quoted HTML body
-      this.initialBodyHtml = this.buildQuotedHtml(msg, 'reply');
+      // Build quoted HTML body with signature
+      const quoted = this.buildQuotedHtml(msg, 'reply');
+      this.getAccountSignature().then((sig) => {
+        const sigBlock = sig ? `<br/><div class="signature">${sig}</div>` : '';
+        this.initialBodyHtml = `<br/>${sigBlock}${quoted}`;
+      });
     } else if (mode === 'forward') {
       this.subjectField = this.addPrefix(msg.subject, 'Fwd:');
 
@@ -325,7 +352,11 @@ export class ComposerComponent {
         msg.messageId,
       ].filter(Boolean);
 
-      this.initialBodyHtml = this.buildQuotedHtml(msg, 'forward');
+      const quoted = this.buildQuotedHtml(msg, 'forward');
+      this.getAccountSignature().then((sig) => {
+        const sigBlock = sig ? `<br/><div class="signature">${sig}</div>` : '';
+        this.initialBodyHtml = `<br/>${sigBlock}${quoted}`;
+      });
     }
   }
 

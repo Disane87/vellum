@@ -182,12 +182,21 @@ export class MessageService {
       ),
     );
 
+    // Use a temporary <a> with an object URL to trigger download.
+    // In Electron, we need to navigate to the blob URL so Chromium's
+    // download manager handles it (anchor click doesn't work on file://).
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
     a.download = filename;
+    a.style.display = 'none';
+    document.body.appendChild(a);
     a.click();
-    URL.revokeObjectURL(url);
+    // Cleanup after a short delay to let the download start
+    setTimeout(() => {
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }, 1000);
   }
 
   invalidateMailboxCache(mailbox?: string): void {
