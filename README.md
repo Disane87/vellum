@@ -158,3 +158,9 @@ Found a vulnerability? Please check our [Security Policy](SECURITY.md) for respo
 <p align="center">
   Made with ❤️ and way too much ☕
 </p>
+
+---
+
+<p align="center">
+  Made by me at <a href="https://subthiel.eu/softwareentwicklung">Subthiel</a> — software development &amp; 3D printing
+</p>
